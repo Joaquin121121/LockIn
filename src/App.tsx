@@ -80,6 +80,29 @@ function App() {
     lockInAudioRef.current = new Audio(LOCK_IN_SOUND);
   }, []);
 
+  // Add keyboard event listener for spacebar to toggle timer
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Only trigger if spacebar is pressed and not in an input element
+      if (
+        event.code === "Space" &&
+        !(event.target instanceof HTMLInputElement) &&
+        !(event.target instanceof HTMLTextAreaElement)
+      ) {
+        event.preventDefault(); // Prevent page scroll on spacebar
+        toggleTimer();
+      }
+    };
+
+    // Add event listener
+    window.addEventListener("keydown", handleKeyDown);
+
+    // Remove event listener on cleanup
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isRunning, timeLeft, activeTimer, isInOvertime]); // Re-create event listener when these values change
+
   // Fetch settings and sessions from Firestore on component mount
   useEffect(() => {
     const loadData = async () => {

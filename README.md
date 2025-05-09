@@ -13,6 +13,7 @@ A productivity timer application built with React that helps you stay focused an
 - Color-coded interface that changes based on the active timer mode
 - **Overtime mode** allowing the timer to continue tracking time after completion
 - **Partial completion** support for tracking incomplete focus sessions
+- **Keyboard shortcuts**: Spacebar to start/stop the timer
 - Customizable timer durations
 - Report view with calendar display showing daily productivity
 - **Statistics dashboard** showing focus patterns and productivity insights
@@ -103,7 +104,9 @@ service cloud.firestore {
 ## Usage
 
 1. Select a timer mode: Lock In, Small Break, or Long Break
-2. Press the START button to begin the timer (a sound will play when starting Lock In mode)
+2. Start/stop the timer:
+   - Click the START/PAUSE button or
+   - Press the **spacebar** key (keyboard shortcut)
 3. The timer will countdown to zero and play a notification sound when complete
 4. For Lock In timers, you have several options:
    - Let the timer continue running in overtime mode to track additional work time
@@ -112,6 +115,14 @@ service cloud.firestore {
 5. View your productivity report by clicking the "Report" button
 6. Analyze your focus patterns by clicking the "Get Stats" button
 7. Customize timer durations by clicking the "Setting" button
+
+## Keyboard Shortcuts
+
+The app supports the following keyboard shortcuts:
+
+- **Spacebar**: Start or pause the active timer
+  - Works anywhere in the app except when typing in input fields
+  - Convenient for quickly controlling the timer without using the mouse
 
 ## Overtime Feature
 
