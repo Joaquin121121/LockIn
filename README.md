@@ -7,10 +7,12 @@ A productivity timer application built with React that helps you stay focused an
 ## Features
 
 - Three timer modes:
-  - **Lock In**: Main focus timer (default 25 minutes)
-  - **Small Break**: Short rest period (default 5 minutes)
-  - **Long Break**: Extended rest period (default 15 minutes)
+  - **Lock In**: Main focus timer (default 90 minutes)
+  - **Small Break**: Short rest period (default 20 minutes)
+  - **Long Break**: Extended rest period (default 45 minutes)
 - Color-coded interface that changes based on the active timer mode
+- **Overtime mode** allowing the timer to continue tracking time after completion
+- **Partial completion** support for tracking incomplete focus sessions
 - Customizable timer durations
 - Report view with calendar display showing daily productivity
 - **Statistics dashboard** showing focus patterns and productivity insights
@@ -102,10 +104,48 @@ service cloud.firestore {
 
 1. Select a timer mode: Lock In, Small Break, or Long Break
 2. Press the START button to begin the timer (a sound will play when starting Lock In mode)
-3. The timer will automatically complete when it reaches zero and play a notification sound
-4. View your productivity report by clicking the "Report" button
-5. Analyze your focus patterns by clicking the "Get Stats" button
-6. Customize timer durations by clicking the "Setting" button
+3. The timer will countdown to zero and play a notification sound when complete
+4. For Lock In timers, you have several options:
+   - Let the timer continue running in overtime mode to track additional work time
+   - Press COMPLETE at any time to save the session (including partial completions)
+   - Press RESET to discard the timer and start over
+5. View your productivity report by clicking the "Report" button
+6. Analyze your focus patterns by clicking the "Get Stats" button
+7. Customize timer durations by clicking the "Setting" button
+
+## Overtime Feature
+
+The overtime feature allows you to continue working past the set timer duration:
+
+- When a Lock In timer reaches zero, it will:
+  - Play the completion sound
+  - Change to overtime mode (indicated by yellow timer display)
+  - Continue counting (showing negative time)
+  - Track overtime separately from regular time
+- To complete a session with overtime:
+  - Click the COMPLETE button that appears when in overtime mode
+  - The session will be saved with both the regular duration and overtime recorded
+- In statistics and reports:
+  - Overtime is highlighted in calendar views
+  - Statistics show both regular time and overtime
+  - Special overtime analysis shows days with most overtime
+  - Visual indicators in charts show the proportion of overtime
+
+## Partial Completion Feature
+
+The partial completion feature allows you to track sessions you don't complete fully:
+
+- When you start a timer but stop before it reaches zero:
+  - The COMPLETE button becomes available
+  - Pressing it will save only the time you actually spent, not the full timer duration
+  - A partial completion indicator shows how much time you've used
+- This is useful for:
+  - When you need to stop work earlier than planned
+  - Recording accurate time usage even for incomplete sessions
+  - Maintaining honest productivity metrics
+- In statistics and reports:
+  - Partial sessions are counted toward your total time
+  - All reports reflect the actual time spent, not the planned time
 
 ## Data Structure
 
@@ -129,6 +169,8 @@ The app uses Firebase Firestore with the following data structure:
      - `date`: string (YYYY-MM-DD format)
      - `type`: string (timer type)
      - `duration`: number (seconds)
+     - `overtime`: number (seconds beyond the set timer)
+     - `isPartialCompletion`: boolean (indicates if session was completed early)
      - `completed`: boolean
      - `timestamp`: Firestore timestamp
 
@@ -137,7 +179,8 @@ The app uses Firebase Firestore with the following data structure:
 The Stats dashboard provides insights into your productivity patterns:
 
 - **Time Period Selection**: View data for the last week, last two weeks, or last month
-- **Total Focus Time**: See how much time you've spent focusing
+- **Total Focus Time**: See how much time you've spent focusing (including overtime)
+- **Overtime Analysis**: Special section showing how much overtime you've worked
 - **Average Daily Focus**: Understand your typical daily focus time
 - **Day Analysis**: Discover your most and least productive days of the week
 - **Daily Breakdown**: Visualize your productivity patterns across different days
@@ -151,6 +194,12 @@ You can adjust the duration of each timer mode in the Settings panel:
 1. Click the "Setting" button in the top right
 2. Change the values for each timer type
 3. Click "Save" to apply your changes (settings sync across devices)
+
+Default timer durations:
+
+- Lock In: 90 minutes
+- Small Break: 20 minutes
+- Long Break: 45 minutes
 
 ### Timer Sounds
 

@@ -63,7 +63,9 @@ export const saveSession = async (sessionData: {
   date: string;
   type: string;
   duration: number;
+  overtime?: number;
   completed: boolean;
+  isPartialCompletion?: boolean;
 }) => {
   try {
     // Create a new document with auto-generated ID

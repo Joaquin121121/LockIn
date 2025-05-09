@@ -480,3 +480,118 @@ body {
     transform: rotate(360deg);
   }
 }
+
+/* Timer buttons container */
+.timer-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* Overtime indicator */
+.overtime-indicator {
+  font-size: 1.2rem;
+  margin-top: 0.5rem;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: bold;
+}
+
+/* Time in overtime mode */
+.time.overtime {
+  color: #ffcc00;
+  text-shadow: 0 0 10px rgba(255, 204, 0, 0.5);
+}
+
+/* Complete and reset buttons */
+.complete-btn,
+.reset-btn {
+  background-color: rgba(255, 255, 255, 0.9);
+  color: #333;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: transform 0.1s, background-color 0.3s;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.complete-btn {
+  background-color: #4caf50;
+  color: white;
+}
+
+.complete-btn:hover {
+  background-color: #43a047;
+}
+
+.reset-btn {
+  background-color: #f44336;
+  color: white;
+}
+
+.reset-btn:hover {
+  background-color: #e53935;
+}
+
+/* Calendar styles for overtime indicator */
+.time-worked.with-overtime {
+  background-color: #ff9800;
+}
+
+/* Stats - overtime text */
+.overtime-text {
+  color: #ff9800;
+  font-weight: bold;
+}
+
+.overtime-stats {
+  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Day bars with overtime */
+.day-bar.with-overtime {
+  background-color: #5c8dc0;
+  position: relative;
+}
+
+.overtime-portion {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  background-color: #ff9800;
+  border-radius: 0 6px 6px 0;
+}
+
+.overtime-indicator {
+  color: #ff9800;
+  margin-left: 2px;
+  font-weight: bold;
+}
+
+/* Partial completion indicator */
+.partial-completion-indicator {
+  font-size: 1.2rem;
+  margin-top: 0.5rem;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: bold;
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 5px 10px;
+  border-radius: 4px;
+}
+
+/* Make complete button more prominent when timer is paused */
+.complete-btn {
+  min-width: 120px;
+}
+
+@media (max-width: 480px) {
+  .timer-buttons {
+    flex-direction: column;
+  }
+}

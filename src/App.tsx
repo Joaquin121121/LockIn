@@ -32,6 +32,8 @@ type Session = {
   type: string;
   duration: number;
   completed: boolean;
+  overtime?: number; // Additional time after timer completion
+  isPartialCompletion?: boolean; // Flag for sessions completed early
   timestamp: any;
 };
 
@@ -44,12 +46,14 @@ function App() {
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [showStats, setShowStats] = useState<boolean>(false);
   const [statsPeriod, setStatsPeriod] = useState<StatsPeriod>("Last Week");
+  const [isInOvertime, setIsInOvertime] = useState<boolean>(false);
+  const [overtimeSeconds, setOvertimeSeconds] = useState<number>(0);
 
   // Timer settings (editable)
   const [timerSettings, setTimerSettings] = useState({
-    "Lock In": 25 * 60, // 25 minutes
-    "Small Break": 5 * 60, // 5 minutes
-    "Long Break": 15 * 60, // 15 minutes
+    "Lock In": 90 * 60, // 90 minutes
+    "Small Break": 20 * 60, // 20 minutes
+    "Long Break": 45 * 60, // 45 minutes
   });
 
   // State for storing all sessions from Firestore
@@ -67,6 +71,8 @@ function App() {
   // Audio element references
   const timerCompleteAudioRef = useRef<HTMLAudioElement | null>(null);
   const lockInAudioRef = useRef<HTMLAudioElement | null>(null);
+  // Original timer duration reference (for overtime calculation)
+  const originalDurationRef = useRef<number>(0);
 
   // Initialize audio elements
   useEffect(() => {
@@ -111,7 +117,9 @@ function App() {
         if (!data[session.date]) {
           data[session.date] = 0;
         }
-        data[session.date] += session.duration;
+        // Include both regular duration and overtime if available
+        const overtime = session.overtime || 0;
+        data[session.date] += session.duration + overtime;
       }
     });
 
@@ -126,22 +134,28 @@ function App() {
       case "Long Break":
         return "#3D74A0";
       default:
-        return "#B8584B"; // Lock In color (from image)
+        return isInOvertime ? "#D23F31" : "#B8584B"; // Slightly different color for overtime
     }
   };
 
   // Handle timer selection
   const handleTimerSelect = (timerType: TimerType) => {
+    // Reset overtime state when changing timer
+    setIsInOvertime(false);
+    setOvertimeSeconds(0);
+
     setActiveTimer(timerType);
     setTimeLeft(timerSettings[timerType]);
     setIsRunning(false);
   };
 
-  // Format time as MM:SS
+  // Format time as MM:SS with optional negative sign
   const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs
+    const isNegative = seconds < 0;
+    const absoluteSeconds = Math.abs(seconds);
+    const mins = Math.floor(absoluteSeconds / 60);
+    const secs = absoluteSeconds % 60;
+    return `${isNegative ? "-" : ""}${mins.toString().padStart(2, "0")}:${secs
       .toString()
       .padStart(2, "0")}`;
   };
@@ -155,32 +169,36 @@ function App() {
         timerRef.current = null;
       }
     } else {
+      // If starting a new timer session (not resuming), store the original duration
+      if (!isInOvertime && timeLeft === timerSettings[activeTimer]) {
+        originalDurationRef.current = timerSettings[activeTimer];
+      }
+
       // Start timer - play lock-in sound if it's the Lock In timer
-      if (activeTimer === "Lock In") {
+      if (
+        activeTimer === "Lock In" &&
+        !isInOvertime &&
+        timeLeft === timerSettings[activeTimer]
+      ) {
         playLockInSound();
       }
 
       // Start timer
       timerRef.current = setInterval(() => {
         setTimeLeft((prevTime) => {
-          if (prevTime <= 1) {
-            // Timer complete
-            clearInterval(timerRef.current!);
-            timerRef.current = null;
-            setIsRunning(false);
+          // If timer reaches zero, play sound and enter overtime mode
+          if (prevTime === 0 && !isInOvertime && activeTimer === "Lock In") {
             playTimerCompleteSound();
-
-            // Record completed session if it was a 'Lock In' timer
-            if (activeTimer === "Lock In") {
-              const today = new Date().toISOString().split("T")[0];
-              const sessionTime = timerSettings["Lock In"];
-
-              // Save session to Firestore
-              saveCompletedSession(today, activeTimer, sessionTime);
-            }
-
-            return 0;
+            setIsInOvertime(true);
+            // Don't stop the timer - continue to negative values
           }
+
+          // If timer is already in overtime mode, update overtime seconds
+          if (prevTime < 0 && isInOvertime) {
+            setOvertimeSeconds(Math.abs(prevTime) + 1); // +1 because we're about to decrement
+          }
+
+          // Continue running (even into negative)
           return prevTime - 1;
         });
       }, 1000);
@@ -188,11 +206,52 @@ function App() {
     setIsRunning(!isRunning);
   };
 
+  // Complete timer and save session
+  const completeTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    setIsRunning(false);
+
+    // Only save if it was a Lock In timer
+    if (activeTimer === "Lock In") {
+      const today = new Date().toISOString().split("T")[0];
+      const originalDuration =
+        originalDurationRef.current || timerSettings["Lock In"];
+
+      if (isInOvertime) {
+        // Complete with overtime
+        saveCompletedSession(
+          today,
+          activeTimer,
+          originalDuration,
+          overtimeSeconds
+        );
+      } else if (timeLeft < originalDuration) {
+        // Partial completion - save only the time that was actually used
+        const actualTimeUsed = originalDuration - timeLeft;
+        saveCompletedSession(today, activeTimer, actualTimeUsed, 0, true);
+      } else {
+        // Normal completion
+        saveCompletedSession(today, activeTimer, originalDuration, 0);
+      }
+    }
+
+    // Reset timer state
+    setTimeLeft(timerSettings[activeTimer]);
+    setIsInOvertime(false);
+    setOvertimeSeconds(0);
+  };
+
   // Save a completed session to Firestore and update local state
   const saveCompletedSession = async (
     date: string,
     type: string,
-    duration: number
+    duration: number,
+    overtime: number = 0,
+    isPartialCompletion: boolean = false
   ) => {
     setIsSyncing(true);
 
@@ -201,7 +260,9 @@ function App() {
         date,
         type,
         duration,
+        overtime,
         completed: true,
+        isPartialCompletion,
       };
 
       const sessionId = await saveSession(sessionData);
@@ -269,6 +330,8 @@ function App() {
     }
     setTimeLeft(timerSettings[activeTimer]);
     setIsRunning(false);
+    setIsInOvertime(false);
+    setOvertimeSeconds(0);
   };
 
   // Get date range for stats period
@@ -293,7 +356,7 @@ function App() {
     return [startDate, today];
   };
 
-  // Calculate stats for the selected period
+  // Calculate stats for the selected period, including overtime
   const calculateStats = () => {
     const [startDate, endDate] = getDateRangeForStats();
 
@@ -310,8 +373,20 @@ function App() {
         Saturday: { total: 0, count: 0 },
       };
 
+    // Track overtime separately for analysis
+    const dayOvertimeTotals: { [dayOfWeek: string]: number } = {
+      Sunday: 0,
+      Monday: 0,
+      Tuesday: 0,
+      Wednesday: 0,
+      Thursday: 0,
+      Friday: 0,
+      Saturday: 0,
+    };
+
     // Process data within the date range
     let totalTimeInPeriod = 0;
+    let totalOvertimeInPeriod = 0;
     let daysWithActivity = 0;
 
     Object.entries(reportData).forEach(([dateStr, seconds]) => {
@@ -325,6 +400,19 @@ function App() {
         const dayOfWeek = format(date, "EEEE");
         dayTotals[dayOfWeek].total += seconds;
         dayTotals[dayOfWeek].count += 1;
+
+        // Also track overtime for this day
+        const sessionsForDay = sessions.filter(
+          (s) => s.date === dateStr && s.type === "Lock In" && s.completed
+        );
+
+        const overtimeForDay = sessionsForDay.reduce(
+          (sum, session) => sum + (session.overtime || 0),
+          0
+        );
+
+        dayOvertimeTotals[dayOfWeek] += overtimeForDay;
+        totalOvertimeInPeriod += overtimeForDay;
 
         // Add to total time
         totalTimeInPeriod += seconds;
@@ -372,13 +460,35 @@ function App() {
       });
     }
 
+    // Calculate overtime percentage
+    const overtimePercentage =
+      totalTimeInPeriod > 0
+        ? Math.round((totalOvertimeInPeriod / totalTimeInPeriod) * 100)
+        : 0;
+
+    // Find day with most overtime
+    let dayWithMostOvertime = "";
+    let maxOvertime = 0;
+
+    Object.entries(dayOvertimeTotals).forEach(([day, overtime]) => {
+      if (overtime > maxOvertime) {
+        maxOvertime = overtime;
+        dayWithMostOvertime = day;
+      }
+    });
+
     return {
       periodStart: format(startDate, "yyyy-MM-dd"),
       periodEnd: format(endDate, "yyyy-MM-dd"),
       totalTimeInPeriod,
+      totalOvertimeInPeriod,
+      overtimePercentage,
+      dayWithMostOvertime,
+      maxOvertime,
       averagePerActiveDay,
       daysWithActivity,
       dayAverages,
+      dayOvertimeTotals,
       highestDay,
       highestAvg,
       lowestDay,
@@ -466,17 +576,55 @@ function App() {
         </div>
 
         <div className="timer-display">
-          <div className="time">{formatTime(timeLeft)}</div>
-          <button className="start-btn" onClick={toggleTimer}>
-            {isRunning ? "PAUSE" : "START"}
-          </button>
+          <div className={`time ${isInOvertime ? "overtime" : ""}`}>
+            {formatTime(timeLeft)}
+          </div>
+
+          <div className="timer-buttons">
+            <button className="start-btn" onClick={toggleTimer}>
+              {isRunning ? "PAUSE" : "START"}
+            </button>
+
+            {/* Show Complete button when timer is running or paused but not reset */}
+            {(isRunning ||
+              (!isRunning && timeLeft < timerSettings[activeTimer])) && (
+              <button className="complete-btn" onClick={completeTimer}>
+                COMPLETE
+              </button>
+            )}
+
+            {(isRunning || timeLeft < timerSettings[activeTimer]) && (
+              <button className="reset-btn" onClick={resetTimer}>
+                RESET
+              </button>
+            )}
+          </div>
+
+          {isInOvertime && (
+            <div className="overtime-indicator">
+              Overtime: {formatHoursMinutes(overtimeSeconds)}
+            </div>
+          )}
+
+          {/* Show partial completion indicator */}
+          {!isRunning &&
+            timeLeft < timerSettings[activeTimer] &&
+            !isInOvertime && (
+              <div className="partial-completion-indicator">
+                Partial:{" "}
+                {formatHoursMinutes(timerSettings[activeTimer] - timeLeft)} of{" "}
+                {formatHoursMinutes(timerSettings[activeTimer])}
+              </div>
+            )}
         </div>
 
         <div className="session-count">
           #
           {sessions.filter((s) => s.type === "Lock In" && s.completed).length +
             1}
-          <div className="session-text">Time to focus!</div>
+          <div className="session-text">
+            {isInOvertime ? "Keep going until you're done!" : "Time to focus!"}
+          </div>
         </div>
       </main>
 
@@ -570,6 +718,17 @@ function App() {
                   date.getMonth() === currentMonth.getMonth();
                 const timeWorked = reportData[dateString] || 0;
 
+                // Calculate overtime for this date
+                const sessionsForDay = sessions.filter(
+                  (s) =>
+                    s.date === dateString &&
+                    s.type === "Lock In" &&
+                    s.completed &&
+                    (s.overtime || 0) > 0
+                );
+
+                const hasOvertime = sessionsForDay.length > 0;
+
                 return (
                   <div
                     key={i}
@@ -581,7 +740,11 @@ function App() {
                       <>
                         <div className="day-number">{day}</div>
                         {timeWorked > 0 && (
-                          <div className="time-worked">
+                          <div
+                            className={`time-worked ${
+                              hasOvertime ? "with-overtime" : ""
+                            }`}
+                          >
                             {Math.floor(timeWorked / 60)} min
                           </div>
                         )}
@@ -635,6 +798,12 @@ function App() {
                 <div className="stats-value">
                   {formatHoursMinutes(stats.totalTimeInPeriod)}
                 </div>
+                {stats.totalOvertimeInPeriod > 0 && (
+                  <div className="stats-subtext overtime-text">
+                    Including {formatHoursMinutes(stats.totalOvertimeInPeriod)}{" "}
+                    overtime ({stats.overtimePercentage}%)
+                  </div>
+                )}
               </div>
 
               <div className="stats-item">
@@ -647,6 +816,19 @@ function App() {
                 </div>
               </div>
             </div>
+
+            {stats.totalOvertimeInPeriod > 0 && (
+              <div className="overtime-stats">
+                <h3>Overtime Analysis</h3>
+                <div className="stats-item highlight">
+                  <div className="stats-label">Most Overtime Day:</div>
+                  <div className="stats-value">{stats.dayWithMostOvertime}</div>
+                  <div className="stats-subtext">
+                    {formatHoursMinutes(stats.maxOvertime)} extra work
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="stats-highlights">
               <h3>Day Analysis</h3>
@@ -682,18 +864,45 @@ function App() {
                     5,
                     Math.floor((seconds / maxValue) * 100)
                   );
+                  const overtime = stats.dayOvertimeTotals[day] || 0;
+                  const hasOvertime = overtime > 0;
 
                   return (
                     <div key={day} className="day-stat">
                       <div className="day-name">{day.substring(0, 3)}</div>
                       <div className="day-bar-container">
                         <div
-                          className="day-bar"
+                          className={`day-bar ${
+                            hasOvertime ? "with-overtime" : ""
+                          }`}
                           style={{ width: `${percentage}%` }}
-                        ></div>
+                        >
+                          {hasOvertime && (
+                            <div
+                              className="overtime-portion"
+                              style={{
+                                width: `${Math.min(
+                                  100,
+                                  Math.round((overtime / seconds) * 100)
+                                )}%`,
+                              }}
+                              title={`${formatHoursMinutes(overtime)} overtime`}
+                            ></div>
+                          )}
+                        </div>
                       </div>
                       <div className="day-time">
                         {formatHoursMinutes(seconds)}
+                        {hasOvertime && (
+                          <span
+                            className="overtime-indicator"
+                            title={`Includes ${formatHoursMinutes(
+                              overtime
+                            )} overtime`}
+                          >
+                            *
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
