@@ -73,6 +73,10 @@ function App() {
   const lockInAudioRef = useRef<HTMLAudioElement | null>(null);
   // Original timer duration reference (for overtime calculation)
   const originalDurationRef = useRef<number>(0);
+  // Start time reference for accurate timing
+  const startTimeRef = useRef<number | null>(null);
+  // Initial time left reference
+  const initialTimeLeftRef = useRef<number>(0);
 
   // Initialize audio elements
   useEffect(() => {
@@ -191,6 +195,13 @@ function App() {
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
+      // Calculate remaining time when pausing
+      if (startTimeRef.current) {
+        const elapsedSeconds = Math.floor(
+          (Date.now() - startTimeRef.current) / 1000
+        );
+        setTimeLeft(initialTimeLeftRef.current - elapsedSeconds);
+      }
     } else {
       // If starting a new timer session (not resuming), store the original duration
       if (!isInOvertime && timeLeft === timerSettings[activeTimer]) {
@@ -206,25 +217,38 @@ function App() {
         playLockInSound();
       }
 
+      // Store initial time and start time
+      initialTimeLeftRef.current = timeLeft;
+      startTimeRef.current = Date.now();
+
       // Start timer
       timerRef.current = setInterval(() => {
-        setTimeLeft((prevTime) => {
-          // If timer reaches zero, play sound and enter overtime mode
-          if (prevTime === 0 && !isInOvertime && activeTimer === "Lock In") {
-            playTimerCompleteSound();
-            setIsInOvertime(true);
-            // Don't stop the timer - continue to negative values
-          }
+        if (startTimeRef.current) {
+          const elapsedSeconds = Math.floor(
+            (Date.now() - startTimeRef.current) / 1000
+          );
+          const newTimeLeft = initialTimeLeftRef.current - elapsedSeconds;
 
-          // If timer is already in overtime mode, update overtime seconds
-          if (prevTime < 0 && isInOvertime) {
-            setOvertimeSeconds(Math.abs(prevTime) + 1); // +1 because we're about to decrement
-          }
+          setTimeLeft((prevTime) => {
+            // If timer reaches zero, play sound and enter overtime mode
+            if (
+              newTimeLeft === 0 &&
+              !isInOvertime &&
+              activeTimer === "Lock In"
+            ) {
+              playTimerCompleteSound();
+              setIsInOvertime(true);
+            }
 
-          // Continue running (even into negative)
-          return prevTime - 1;
-        });
-      }, 1000);
+            // If timer is already in overtime mode, update overtime seconds
+            if (newTimeLeft < 0 && isInOvertime) {
+              setOvertimeSeconds(Math.abs(newTimeLeft));
+            }
+
+            return newTimeLeft;
+          });
+        }
+      }, 100); // Update more frequently for smoother countdown
     }
     setIsRunning(!isRunning);
   };
@@ -351,6 +375,7 @@ function App() {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
+    startTimeRef.current = null;
     setTimeLeft(timerSettings[activeTimer]);
     setIsRunning(false);
     setIsInOvertime(false);
